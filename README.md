@@ -3,10 +3,8 @@ WMGater is a trance gate effect with delay for Monome Norns Shield. It features 
 
 Features
 32-step pattern sequencer
-Multiple timing divisions including triplets
-Two gating modes: Retrig and Legato
 Adjustable envelope controls (Attack and Release)
-Built-in synchronized delay with feedback and mix controls
+Built-in chorus & delay effects
 Output level control
 Requirements
 Monome Norns Shield
@@ -27,20 +25,19 @@ K2: Toggle selected step (on/off)
 K3: Start/stop pattern
 Parameters
 Gate Controls
-Gate Mode: Retrig/Legato
-Step Division: 2/1 to 1/128 (including triplet divisions)
-Level: Output level (0.0 - 1.0)
-Attack: Gate attack time (0.0 - 5.0s)
-Release: Gate release time (0.0 - 5.0s)
+Step Division: 2/1 to 1/128
+Output level
+Attack, Decay, Sustain, Release
+Chorus Controls
+Rate: 0.0-1.0 Hz
+Depth: 0-100%
+Mix: Dry/wet mix (0.0 - 1.0)
 Delay Controls
-Delay Time: 0.0 - 2.0s
-Delay Feedback: 0.0 - 0.95
-Delay Mix: Dry/wet mix (0.0 - 1.0)
+Time: 0.0 - 2.0s
+Feedback: 0.0 - 0.95
+Mix: Dry/wet mix (0.0 - 1.0)
 Display
 The screen shows all parameters in the upper portion, with the 32-step sequencer displayed as two rows of 16 steps below. The currently selected step is highlighted with a border, and active steps are filled. During playback, the current step is highlighted at full brightness.
 
-Documentation
-Visit llllllll.co/t/wmgater for more information, discussion, and updates.
-
 Version
-v1.2.0
+v2.7.0
