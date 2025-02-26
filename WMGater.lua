@@ -1,27 +1,32 @@
 -- WMGater
--- v1.2.0 @username
--- llllllll.co/t/wmgater
+-- v2.7.0 @wallacemarino
 --
--- Trance gate effect with
--- triplet divisions, 32-step pattern
--- and synchronized delay
+-- Audio gate with chorus
+-- and delay effects
 --
--- IMPORTANT: Set MONITOR level 
--- to -inf in LEVELS menu before 
--- using to prevent feedback
+-- E1: Select page (1-3)
+-- E2: Navigate settings
+-- E3: Adjust selected setting
+--     (In step seq: select step)
+-- K2: Toggle selected step
+--     (in step sequencer)
+-- K3: Start/Stop sequence
 --
--- E1: select parameter
--- E2: adjust value
--- E3: select step
--- K2: toggle step
--- K3: start/stop
+-- Regulating the monitor
+-- input level is key to this
+-- effect as it controls
+-- the mix between the 
+-- incoming and gated
+-- signals. Enjoy
 
--- Ensure proper module loading order
+engine.name = 'WMGater'
+
+local controlspec = require 'controlspec'
+local formatters = require 'formatters'
+local UI = require 'ui'
 local musicutil = require 'musicutil'
 local lattice = require 'lattice'
 local util = require 'util'
-
-engine.name = 'WMGater'
 
 -- State variables
 local steps = 32
@@ -32,254 +37,281 @@ local selected_param = 1
 local pattern = {}
 local my_lattice
 local gating_pattern
-local last_gate_state = 0
+local current_page = 1
 
--- Musical division display values
-local division_labels = {
-  [2] = "2/1", [1] = "1", [3/4] = "1T",
-  [1/2] = "1/2", [3/8] = "1/2T", [1/4] = "1/4",
-  [3/16] = "1/4T", [1/8] = "1/8", [3/32] = "1/8T",
-  [1/16] = "1/16", [3/64] = "1/16T", [1/32] = "1/32",
-  [3/128] = "1/32T", [1/64] = "1/64", [1/128] = "1/128"
-}
+-- Parameter formatters
+local function format_percent(param)
+    return string.format("%.1f%%", param:get() * 100)
+end
 
-local function get_division_display(div)
-  return division_labels[div] or string.format("1/%d", math.floor(1/div + 0.5))
+local function format_hz(param)
+    return string.format("%.2f Hz", param:get())
 end
 
 function init()
-  -- Initialize pattern
-  for i=1,steps do
-    pattern[i] = 0
-  end
-  
-  params:add_separator("WMGater")
-  
-  params:add{
-    type = "option",
-    id = "gate_mode",
-    name = "Gate Mode",
-    options = {"Retrig", "Legato"},
-    default = 1
-  }
-  
-  params:add{
-    type = "option",
-    id = "division",
-    name = "Step Division",
-    options = {"2/1", "1", "1T", "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T", 
-              "1/16", "1/16T", "1/32", "1/32T", "1/64", "1/128"},
-    default = 6,
-    action = function(val)
-      local divs = {2, 1, 3/4, 1/2, 3/8, 1/4, 3/16, 1/8, 3/32, 
-                   1/16, 3/64, 1/32, 3/128, 1/64, 1/128}
-      if gating_pattern then
-        gating_pattern.division = divs[val]
-      end
+    -- Initialize pattern
+    for i=1,steps do pattern[i] = 0 end
+    
+    params:add_separator("WMGater")
+    
+    params:add{
+        type = "option",
+        id = "division",
+        name = "Division",
+        options = {"2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128"},
+        default = 4,
+        action = function(val)
+            local divs = {0.5, 1, 2, 4, 8, 16, 32, 64, 128}
+            if gating_pattern then
+                gating_pattern.division = 1/divs[val]
+            end
+        end
+    }
+    
+    params:add{
+        type = "control",
+        id = "level",
+        name = "Level",
+        controlspec = controlspec.new(0, 1.0, 'lin', 0.01, 1.0, ""),
+        formatter = format_percent,
+        action = function(x) engine.level(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "attack",
+        name = "Attack",
+        controlspec = controlspec.new(0.00, 5.00, 'lin', 0.01, 0.01, 's'),
+        action = function(x) engine.attack(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "decay",
+        name = "Decay",
+        controlspec = controlspec.new(0.00, 3.00, 'lin', 0.01, 0.10, 's'),
+        action = function(x) engine.decay(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "sustain",
+        name = "Sustain",
+        controlspec = controlspec.new(0, 1.0, 'lin', 0.01, 0.5, ""),
+        formatter = format_percent,
+        action = function(x) engine.sustain(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "release",
+        name = "Release",
+        controlspec = controlspec.new(0.0, 5.0, 'lin', 0.01, 0.01, 's'),
+        action = function(x) engine.release(x) end
+    }
+    
+    params:add_separator("Wobbler")
+    
+    params:add{
+        type = "control",
+        id = "wobbleRate",
+        name = "Rate",
+        controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0, "Hz"),
+        formatter = format_hz,
+        action = function(x) engine.wobbleRate(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "wobbleDepth",
+        name = "Depth",
+        controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.5, ""),
+        formatter = format_percent,
+        action = function(x) engine.wobbleDepth(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "wobbleMix",
+        name = "Mix",
+        controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0, ""),
+        formatter = format_percent,
+        action = function(x) engine.wobbleMix(x) end
+    }
+    
+    params:add_separator("Delay")
+    
+    params:add{
+        type = "option",
+        id = "delayMode",
+        name = "Mode",
+        options = {"Mono", "Ping-pong"},
+        default = 1,
+        action = function(x) engine.delayMode(x-1) end
+    }
+    
+    params:add{
+      type = "control",
+      id = "delaytime",
+      name = "Time",
+      controlspec = controlspec.new(0.0, 2.0, 'lin', 0.01, 0.2, "s"),
+      action = function(x) engine.delaytime(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "delayfeedback",
+        name = "Feedback",
+        controlspec = controlspec.new(0.0, 0.95, 'lin', 0.01, 0.3, ""),
+        formatter = format_percent,
+        action = function(x) engine.delayfeedback(x) end
+    }
+    
+    params:add{
+        type = "control",
+        id = "delaymix",
+        name = "Mix",
+        controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0, ""),
+        formatter = format_percent,
+        action = function(x) engine.delaymix(x) end
+    }
+    
+    my_lattice = lattice:new{
+        auto = true,
+        ppqn = 96
+    }
+    
+    gating_pattern = my_lattice:new_pattern{
+        action = function(t)
+            engine.gate(pattern[current_step])
+            current_step = current_step % steps + 1
+            redraw()
+        end,
+        division = 1/4
+    }
+    
+    params:bang()
+    redraw()
+end
+
+function get_current_param_id()
+    if current_page == 1 then
+        local params = {"division", "level", "attack", "decay", "sustain", "release"}
+        return params[selected_param]
+    elseif current_page == 2 then
+        local params = {"wobbleRate", "wobbleDepth", "wobbleMix"}
+        return params[selected_param]
+    else
+        local params = {"delayMode", "delaytime", "delayfeedback", "delaymix"}
+        return params[selected_param]
     end
-  }
-  
-  params:add{
-    type = "control",
-    id = "level",
-    name = "Output Level",
-    controlspec = controlspec.new(0, 1.0, 'lin', 0, 1.0, ""),
-    action = function(x) engine.level(x) end
-  }
-  
-  params:add{
-    type = "control",
-    id = "attack",
-    name = "Attack Time",
-    controlspec = controlspec.new(0.0, 5.0, 'lin', 0.01, 0.01, 's'),
-    action = function(x) engine.attack(x) end
-  }
-  
-  params:add{
-    type = "control",
-    id = "release",
-    name = "Release Time",
-    controlspec = controlspec.new(0.0, 5.0, 'lin', 0.01, 0.01, 's'),
-    action = function(x) engine.release(x) end
-  }
-  
-  params:add_separator("Delay")
-  
-  params:add{
-    type = "control",
-    id = "delaytime",
-    name = "Delay Time",
-    controlspec = controlspec.new(0.00, 2.0, 'lin', 0.01, 0.2, 's'),
-    action = function(x) engine.delaytime(x) end
-  }
-  
-  params:add{
-    type = "control",
-    id = "delayfb",
-    name = "Delay Feedback",
-    controlspec = controlspec.new(0.0, 0.95, 'lin', 0.01, 0.3, ''),
-    action = function(x) engine.delayfeedback(x) end
-  }
-  
-  params:add{
-    type = "control",
-    id = "delaymix",
-    name = "Delay Mix",
-    controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.2, ''),
-    action = function(x) engine.delaymix(x) end
-  }
-  
-  my_lattice = lattice:new{
-    auto = true,
-    ppqn = 96
-  }
-  
-  gating_pattern = my_lattice:new_pattern{
-    action = function(t)
-      local new_gate_state = pattern[current_step]
-      
-      if params:get("gate_mode") == 1 then
-        -- Retrig mode
-        if new_gate_state ~= last_gate_state then
-          engine.gate(new_gate_state)
-          last_gate_state = new_gate_state
-        end
-      else
-        -- Legato mode
-        if new_gate_state == 1 then
-          if last_gate_state == 0 then
-            engine.gate(1)
-          end
-          last_gate_state = 1
-        else
-          if last_gate_state == 1 then
-            engine.gate(0)
-          end
-          last_gate_state = 0
-        end
-      end
-      
-      current_step = current_step % steps + 1
-      redraw()
-    end,
-    division = 1/4
-  }
-  
-  params:bang()
 end
 
 function enc(n,d)
-  if n == 1 then
-    selected_param = util.clamp(selected_param + d, 1, 8)
-  elseif n == 2 then
-    if selected_param == 1 then
-      params:delta("gate_mode", d)
-    elseif selected_param == 2 then
-      params:delta("division", d)
-    elseif selected_param == 3 then
-      params:delta("level", d)
-    elseif selected_param == 4 then
-      params:delta("attack", d)
-    elseif selected_param == 5 then
-      params:delta("release", d)
-    elseif selected_param == 6 then
-      params:delta("delaytime", d)
-    elseif selected_param == 7 then
-      params:delta("delayfb", d)
-    elseif selected_param == 8 then
-      params:delta("delaymix", d)
+    if n == 1 then
+        current_page = util.clamp(current_page + d, 1, 3)
+        selected_param = 1
+    elseif n == 2 then
+        local max_params = current_page == 1 and 7 or
+                          current_page == 2 and 3 or 4
+        selected_param = util.clamp(selected_param + d, 1, max_params)
+    elseif n == 3 then
+        if current_page == 1 and selected_param == 7 then
+            selected_step = util.clamp(selected_step + d, 1, steps)
+        else
+            local param_id = get_current_param_id()
+            if param_id then params:delta(param_id, d) end
+        end
     end
-  elseif n == 3 then
-    selected_step = util.clamp(selected_step + d, 1, steps)
-  end
-  redraw()
+    redraw()
 end
 
 function key(n,z)
-  if z == 1 then
-    if n == 2 then
-      pattern[selected_step] = 1 - pattern[selected_step]
-      redraw()
-    elseif n == 3 then
-      if not playing then
-        current_step = 1
-        last_gate_state = 0
-        my_lattice:start()
-        playing = true
-      else
-        my_lattice:stop()
-        playing = false
-        engine.gate(0)
-        last_gate_state = 0
-      end
-      redraw()
+    if n == 2 and z == 1 then
+        if current_page == 1 and selected_param == 7 then
+            pattern[selected_step] = 1 - pattern[selected_step]
+        end
+    elseif n == 3 and z == 1 then
+        if not playing then
+            current_step = 1
+            my_lattice:start()
+        else
+            my_lattice:stop()
+            engine.gate(0)
+        end
+        playing = not playing
     end
-  end
+    redraw()
 end
 
 function redraw()
-  screen.clear()
-  
-  -- Draw parameters
-  screen.move(0, 8)
-  screen.level(selected_param == 1 and 15 or 3)
-  screen.text("Mode: " .. params:string("gate_mode"))
-  
-  screen.move(64, 8)
-  screen.level(selected_param == 2 and 15 or 3)
-  screen.text("Div: " .. params:string("division"))
-  
-  screen.move(0, 16)
-  screen.level(selected_param == 3 and 15 or 3)
-  screen.text("Level: " .. string.format("%.2f", params:get("level")))
-  
-  screen.move(64, 16)
-  screen.level(selected_param == 4 and 15 or 3)
-  screen.text("Atk: " .. string.format("%.2f", params:get("attack")))
-  
-  screen.move(0, 24)
-  screen.level(selected_param == 5 and 15 or 3)
-  screen.text("Rel: " .. string.format("%.2f", params:get("release")))
-  
-  screen.move(64, 24)
-  screen.level(selected_param == 6 and 15 or 3)
-  screen.text("DTime: " .. string.format("%.2f", params:get("delaytime")))
-  
-  screen.move(0, 32)
-  screen.level(selected_param == 7 and 15 or 3)
-  screen.text("DFb: " .. string.format("%.2f", params:get("delayfb")))
-  
-  screen.move(64, 32)
-  screen.level(selected_param == 8 and 15 or 3)
-  screen.text("DMix: " .. string.format("%.2f", params:get("delaymix")))
-  
-  -- Draw sequence steps
-  for i=1,32 do
-    local row = i > 16 and 1 or 0
-    local x = ((i-1)%16)*8
-    local y = 44 + (row * 12)
+    screen.clear()
+    screen.aa(1)
     
-    screen.level(i == current_step and playing and 15 or 3)
-    screen.rect(x, y, 6, 6)
-    if pattern[i] == 1 then
-      screen.fill()
+    screen.level(15)
+    screen.move(2, 8)
+    screen.text(current_page == 1 and "GATE 1/3" or 
+               current_page == 2 and "CHORUS 2/3" or "DELAY 3/3")
+    
+    if current_page == 1 then
+        local col1 = {"Division", "Level", "Attack"}
+        local col2 = {"Decay", "Sustain", "Release"}
+        local col1_params = {"division", "level", "attack"}
+        local col2_params = {"decay", "sustain", "release"}
+        
+        for i, name in ipairs(col1) do
+            screen.move(2, 16 + i * 8)
+            screen.level(selected_param == i and 15 or 4)
+            screen.text(name .. ": " .. params:string(col1_params[i]))
+        end
+        
+        for i, name in ipairs(col2) do
+            screen.move(64, 16 + i * 8)
+            screen.level(selected_param == i + 3 and 15 or 4)
+            screen.text(name .. ": " .. params:string(col2_params[i]))
+        end
+        
+        screen.level(selected_param == 7 and 15 or 4)
+        for i=1,32 do
+            local x = ((i-1)%16)*8
+            local y = 44 + (math.floor((i-1)/16) * 12)
+            
+            screen.level(i == current_step and playing and 15 or 3)
+            screen.rect(x, y, 6, 6)
+            if pattern[i] == 1 then
+                screen.fill()
+            else
+                screen.stroke()
+            end
+            
+            if i == selected_step and selected_param == 7 then
+                screen.level(15)
+                screen.rect(x-1, y-1, 8, 8)
+                screen.stroke()
+            end
+        end
     else
-      screen.stroke()
+        local param_names, param_ids
+        
+        if current_page == 2 then
+            param_names = {"Rate", "Depth", "Mix"}
+            param_ids = {"wobbleRate", "wobbleDepth", "wobbleMix"}
+        else
+            param_names = {"Mode", "Time", "Feedback", "Mix"}
+            param_ids = {"delayMode", "delaytime", "delayfeedback", "delaymix"}
+        end
+        
+        for i, name in ipairs(param_names) do
+            screen.move(2, 20 + i * 10)
+            screen.level(selected_param == i and 15 or 4)
+            screen.text(name .. ": " .. params:string(param_ids[i]))
+        end
     end
     
-    if i == selected_step then
-      screen.level(15)
-      screen.rect(x-1, y-1, 8, 8)
-      screen.stroke()
-    end
-  end
-  
-  screen.update()
+    screen.update()
 end
 
 function cleanup()
-  if my_lattice then
-    my_lattice:stop()
-  end
-  engine.gate(0)
+    if my_lattice then my_lattice:stop() end
+    engine.gate(0)
 end
