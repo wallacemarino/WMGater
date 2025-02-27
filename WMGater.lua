@@ -1,7 +1,7 @@
 -- WMGater
 -- v2.7.0 @wallacemarino
 --
--- Audio gate with chorus
+-- Audio gate with wobble
 -- and delay effects
 --
 -- E1: Select page (1-3)
@@ -55,18 +55,45 @@ function init()
     params:add_separator("WMGater")
     
     params:add{
-        type = "option",
-        id = "division",
-        name = "Division",
-        options = {"2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128"},
-        default = 4,
-        action = function(val)
-            local divs = {0.5, 1, 2, 4, 8, 16, 32, 64, 128}
-            if gating_pattern then
-                gating_pattern.division = 1/divs[val]
-            end
-        end
+  type = "option",
+  id = "division",
+  name = "Division",
+  options = {
+    "2/1", "1/1", 
+    "1/2", "1/2T", 
+    "1/4", "1/4T", 
+    "1/8", "1/8T", 
+    "1/16", "1/16T",
+    "1/32", "1/32T",
+    "1/64", "1/64T",
+    "1/128", "1/128T"
+  },
+  default = 5, -- setting default to 1/4
+  action = function(val)
+    -- Division values including triplets
+    local divs = {
+      0.5,    -- 2/1
+      1,      -- 1/1
+      2,      -- 1/2
+      3,      -- 1/2T (triplet)
+      4,      -- 1/4
+      6,      -- 1/4T (triplet)
+      8,      -- 1/8
+      12,     -- 1/8T (triplet)
+      16,     -- 1/16
+      24,     -- 1/16T (triplet)
+      32,     -- 1/32
+      48,     -- 1/32T (triplet)
+      64,     -- 1/64
+      96,     -- 1/64T (triplet)
+      128,    -- 1/128
+      192     -- 1/128T (triplet)
     }
+    if gating_pattern then
+      gating_pattern.division = 1 / divs[val]
+    end
+  end
+}
     
     params:add{
         type = "control",
